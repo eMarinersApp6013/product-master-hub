@@ -6,6 +6,8 @@ const isPublicRoute = createRouteMatcher([
   '/',
 ])
 
+const isAdminRoute = createRouteMatcher(['/admin(.*)'])
+
 export default clerkMiddleware((auth, request) => {
   if (!isPublicRoute(request)) {
     auth().protect()
