@@ -1,195 +1,172 @@
-import {
-  BookOpen,
-  Plus,
-  Download,
-  Eye,
-  Trash2,
-  FileText,
-  Palette,
-  Layout,
-  Package,
-  Calendar,
-} from 'lucide-react'
+'use client'
 
-const catalogs = [
-  {
-    id: 1,
-    name: 'Summer Collection 2024',
-    products: 48,
-    pages: 24,
-    template: 'Premium Grid',
-    created: 'Mar 15, 2024',
-    status: 'published',
-  },
-  {
-    id: 2,
-    name: 'Festive Season Special',
-    products: 72,
-    pages: 36,
-    template: 'Elegant Portrait',
-    created: 'Mar 10, 2024',
-    status: 'draft',
-  },
-  {
-    id: 3,
-    name: 'Wholesale Catalog Q1',
-    products: 156,
-    pages: 78,
-    template: 'Business Classic',
-    created: 'Mar 5, 2024',
-    status: 'published',
-  },
-]
+import { useState, useEffect } from 'react'
+import { BookOpen, Plus, Download, Trash2, RefreshCw, FileText } from 'lucide-react'
 
-const templates = [
-  { id: 1, name: 'Premium Grid', desc: 'Modern 3-column layout', color: '#6366F1' },
-  { id: 2, name: 'Elegant Portrait', desc: 'Single product showcase', color: '#EC4899' },
-  { id: 3, name: 'Business Classic', desc: 'Professional B2B style', color: '#10B981' },
-  { id: 4, name: 'Festival Special', desc: 'Colorful festive theme', color: '#F59E0B' },
+interface CatalogJob { id: string; name: string; status: 'generating' | 'ready' | 'error'; pages?: number; created_at: string; downloadUrl?: string }
+
+const TEMPLATES = [
+  { id: 'modern',    label: 'Modern Grid',   desc: '4 products/page, white bg, bold titles' },
+  { id: 'elegant',   label: 'Elegant Dark',  desc: '2 products/page, dark theme, luxury feel' },
+  { id: 'minimal',   label: 'Minimal',       desc: '6 products/page, clean, perfect for wholesale' },
+  { id: 'festive',   label: 'Festive',       desc: 'Colorful, ideal for seasonal promotions' },
 ]
 
 export default function PDFCatalogPage() {
+  const [jobs,     setJobs]     = useState<CatalogJob[]>([])
+  const [template, setTemplate] = useState('modern')
+  const [title,    setTitle]    = useState('Product Catalog')
+  const [category, setCategory] = useState('')
+  const [loading,  setLoading]  = useState(false)
+  const [error,    setError]    = useState('')
+
+  // Load saved catalogs from localStorage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('pv_catalogs')
+      if (saved) setJobs(JSON.parse(saved))
+    } catch { /* ignore */ }
+  }, [])
+
+  const saveJobs = (updated: CatalogJob[]) => {
+    setJobs(updated)
+    try { localStorage.setItem('pv_catalogs', JSON.stringify(updated.slice(0, 20))) } catch { /* ignore */ }
+  }
+
+  const handleGenerate = async () => {
+    if (!title.trim()) { setError('Enter a catalog title'); return }
+    setLoading(true); setError('')
+
+    const jobId = Date.now().toString()
+    const newJob: CatalogJob = { id: jobId, name: title, status: 'generating', created_at: new Date().toISOString() }
+    saveJobs([newJob, ...jobs])
+
+    try {
+      const params = new URLSearchParams({ title, template })
+      if (category) params.set('category', category)
+      const res = await fetch(`/api/catalog/generate?${params}`)
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Generation failed') }
+
+      const blob = await res.blob()
+      const downloadUrl = URL.createObjectURL(blob)
+      const pages = Math.ceil(blob.size / 10000) // rough estimate
+
+      // Trigger download immediately
+      const a = document.createElement('a')
+      a.href = downloadUrl
+      a.download = `${title.replace(/\s+/g,'-')}.pdf`
+      a.click()
+
+      setJobs(prev => {
+        const updated = prev.map(j => j.id === jobId ? { ...j, status: 'ready' as const, pages, downloadUrl } : j)
+        try { localStorage.setItem('pv_catalogs', JSON.stringify(updated.slice(0, 20))) } catch { /* ignore */ }
+        return updated
+      })
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Generation failed'
+      setError(msg)
+      setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: 'error' } : j))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDownload = (job: CatalogJob) => {
+    if (!job.downloadUrl) return
+    const a = document.createElement('a')
+    a.href = job.downloadUrl
+    a.download = `${job.name}.pdf`
+    a.click()
+  }
+
+  const handleDelete = (id: string) => saveJobs(jobs.filter(j => j.id !== id))
+
   return (
     <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="font-syne font-bold text-2xl text-white">PDF Catalog</h1>
-          <p className="text-slate-400 text-sm font-dm mt-0.5">
-            Create beautiful product catalogs for buyers and distributors
-          </p>
-        </div>
-        <button className="flex items-center gap-2 px-4 py-2.5 bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-dm font-medium rounded-lg transition-colors">
-          <Plus className="w-4 h-4" />
-          New Catalog
-        </button>
+      <div>
+        <h1 className="font-syne font-bold text-2xl text-white">PDF Catalog</h1>
+        <p className="text-slate-400 text-sm font-dm mt-0.5">Generate beautiful product catalogs as PDF</p>
       </div>
 
       {/* Templates */}
-      <div>
-        <h2 className="font-syne font-semibold text-white mb-3">Templates</h2>
+      <div className="glass-card rounded-xl p-5">
+        <h2 className="font-syne font-semibold text-white mb-4">Choose Template</h2>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {templates.map((t) => (
-            <button
-              key={t.id}
-              className="glass-card rounded-xl p-4 text-left hover:border-white/10 transition-all group"
-            >
-              <div
-                className="w-full aspect-[4/3] rounded-lg mb-3 flex items-center justify-center"
-                style={{ backgroundColor: `${t.color}15` }}
-              >
-                <Layout className="w-8 h-8" style={{ color: t.color, opacity: 0.6 }} />
-              </div>
-              <p className="font-dm font-medium text-slate-200 text-sm">{t.name}</p>
-              <p className="font-dm text-slate-600 text-xs mt-0.5">{t.desc}</p>
+          {TEMPLATES.map(t => (
+            <button key={t.id} onClick={() => setTemplate(t.id)}
+              className={`p-4 rounded-xl border text-left transition-all ${template === t.id ? 'border-indigo-500/60 bg-indigo-500/10' : 'border-white/10 bg-white/3 hover:border-white/20'}`}>
+              <p className="text-sm font-dm font-semibold text-white mb-1">{t.label}</p>
+              <p className="text-xs font-dm text-slate-500">{t.desc}</p>
             </button>
           ))}
         </div>
       </div>
 
-      {/* Catalog Builder Preview */}
+      {/* Quick Build */}
       <div className="glass-card rounded-xl p-5 space-y-4">
-        <div className="flex items-center gap-2">
-          <Palette className="w-5 h-5 text-indigo-400" />
-          <h2 className="font-syne font-semibold text-white">Quick Build</h2>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <h2 className="font-syne font-semibold text-white">Generate Catalog</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-dm text-slate-400 mb-1.5">Catalog Name</label>
-            <input
-              type="text"
-              placeholder="e.g. Summer Collection 2024"
-              className="w-full bg-[#1E293B] border border-white/10 rounded-lg px-3 py-2.5 text-sm font-dm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50"
-            />
+            <label className="block text-xs font-dm text-slate-400 mb-1.5">Catalog Title *</label>
+            <input value={title} onChange={e => setTitle(e.target.value)}
+              placeholder="My Product Catalog 2024"
+              className="w-full bg-[#1E293B] border border-white/10 rounded-lg px-3 py-2.5 text-sm font-dm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50" />
           </div>
           <div>
-            <label className="block text-xs font-dm text-slate-400 mb-1.5">Select Category</label>
-            <select className="w-full bg-[#1E293B] border border-white/10 rounded-lg px-3 py-2.5 text-sm font-dm text-slate-200 focus:outline-none focus:border-indigo-500/50">
-              <option>All Products</option>
-              <option>Ethnic Wear</option>
-              <option>Sarees</option>
-              <option>Kurtis</option>
-              <option>Accessories</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-dm text-slate-400 mb-1.5">Products per Page</label>
-            <select className="w-full bg-[#1E293B] border border-white/10 rounded-lg px-3 py-2.5 text-sm font-dm text-slate-200 focus:outline-none focus:border-indigo-500/50">
-              <option>2 products</option>
-              <option>4 products</option>
-              <option>6 products</option>
-              <option>9 products</option>
-            </select>
+            <label className="block text-xs font-dm text-slate-400 mb-1.5">Filter by Category (optional)</label>
+            <input value={category} onChange={e => setCategory(e.target.value)}
+              placeholder="e.g. Ethnic Wear"
+              className="w-full bg-[#1E293B] border border-white/10 rounded-lg px-3 py-2.5 text-sm font-dm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50" />
           </div>
         </div>
-
-        <div className="flex items-center gap-3">
-          <button className="flex items-center gap-2 px-5 py-2.5 bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-dm font-medium rounded-lg transition-colors">
-            <FileText className="w-4 h-4" />
-            Generate PDF
-          </button>
-          <button className="flex items-center gap-2 px-5 py-2.5 bg-white/5 hover:bg-white/8 border border-white/10 text-slate-300 text-sm font-dm rounded-lg transition-colors">
-            <Eye className="w-4 h-4" />
-            Preview
-          </button>
-        </div>
+        {error && <p className="text-red-400 text-sm font-dm">{error}</p>}
+        <button onClick={handleGenerate} disabled={loading}
+          className="flex items-center gap-2 px-5 py-2.5 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-dm font-medium rounded-lg transition-colors">
+          {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+          {loading ? 'Generating PDF…' : 'Generate & Download'}
+        </button>
+        <p className="text-xs font-dm text-slate-600">PDF will include all your products matching the filters, formatted using the selected template.</p>
       </div>
 
-      {/* Existing Catalogs */}
-      <div>
-        <h2 className="font-syne font-semibold text-white mb-3">My Catalogs</h2>
-        <div className="space-y-3">
-          {catalogs.map((catalog) => (
-            <div
-              key={catalog.id}
-              className="glass-card rounded-xl p-4 flex items-center gap-4 hover:border-white/10 transition-all group"
-            >
-              <div className="w-12 h-14 rounded-lg bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-500/20 flex items-center justify-center shrink-0">
-                <BookOpen className="w-5 h-5 text-indigo-400" />
-              </div>
-              <div className="flex-1 min-w-0">
+      {/* History */}
+      {jobs.length > 0 && (
+        <div className="glass-card rounded-xl p-5">
+          <h2 className="font-syne font-semibold text-white mb-4">Generated Catalogs</h2>
+          <div className="space-y-2">
+            {jobs.map(job => (
+              <div key={job.id} className="flex items-center gap-3 p-3 bg-white/3 rounded-lg border border-white/5">
+                <FileText className={`w-4 h-4 shrink-0 ${job.status === 'ready' ? 'text-indigo-400' : job.status === 'error' ? 'text-red-400' : 'text-amber-400'}`} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-dm text-slate-200 truncate">{job.name}</p>
+                  <p className="text-xs font-dm text-slate-500">
+                    {job.status === 'generating' ? 'Generating…'
+                     : job.status === 'error'    ? 'Failed'
+                     : `Ready · ${job.pages ?? '?'} pages`}
+                    {' · '}{new Date(job.created_at).toLocaleDateString('en-IN')}
+                  </p>
+                </div>
                 <div className="flex items-center gap-2">
-                  <p className="font-dm font-semibold text-slate-200">{catalog.name}</p>
-                  <span
-                    className={`text-[10px] font-dm px-2 py-0.5 rounded-full ${
-                      catalog.status === 'published'
-                        ? 'bg-emerald-400/10 text-emerald-400'
-                        : 'bg-amber-400/10 text-amber-400'
-                    }`}
-                  >
-                    {catalog.status}
-                  </span>
-                </div>
-                <div className="flex items-center gap-3 mt-1 text-xs font-dm text-slate-500">
-                  <span className="flex items-center gap-1">
-                    <Package className="w-3 h-3" />
-                    {catalog.products} products
-                  </span>
-                  <span>{catalog.pages} pages</span>
-                  <span className="flex items-center gap-1">
-                    <Calendar className="w-3 h-3" />
-                    {catalog.created}
-                  </span>
+                  {job.status === 'ready' && job.downloadUrl && (
+                    <button onClick={() => handleDownload(job)} className="p-1.5 rounded-lg bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500/30 transition-colors">
+                      <Download className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  <button onClick={() => handleDelete(job.id)} className="p-1.5 rounded-lg bg-white/5 text-slate-500 hover:text-red-400 transition-colors">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               </div>
-              <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-dm rounded-lg border border-white/10 bg-white/5 text-slate-400 hover:text-white">
-                  <Eye className="w-3 h-3" />
-                  View
-                </button>
-                <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-dm rounded-lg border border-indigo-500/30 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20">
-                  <Download className="w-3 h-3" />
-                  Download
-                </button>
-                <button className="w-7 h-7 rounded-lg bg-red-500/10 hover:bg-red-500/20 flex items-center justify-center text-red-400">
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      </div>
+      )}
+
+      {jobs.length === 0 && (
+        <div className="glass-card rounded-xl p-12 text-center">
+          <BookOpen className="w-10 h-10 text-slate-600 mx-auto mb-3" />
+          <p className="text-slate-500 font-dm text-sm">No catalogs generated yet. Create your first one above!</p>
+        </div>
+      )}
     </div>
   )
 }

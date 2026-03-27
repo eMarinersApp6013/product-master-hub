@@ -7,9 +7,7 @@ import {
   ArrowUpRight,
   Sparkles,
   Globe2,
-  AlertCircle,
   CheckCircle2,
-  AlertTriangle,
 } from 'lucide-react'
 import { getDashboardStats } from '@/lib/actions/users'
 import { getProducts } from '@/lib/actions/products'
@@ -19,14 +17,6 @@ const platformStats = [
   { name: 'Flipkart', color: '#2874F0' },
   { name: 'Etsy', color: '#F56400' },
   { name: 'Meesho', color: '#9B32B4' },
-]
-
-const recentActivity = [
-  { action: 'Product synced to Amazon', product: 'Silk Kurta Set – Navy Blue', time: '2 min ago', status: 'success' },
-  { action: 'Price updated on Flipkart', product: 'Cotton Blend Saree – Red', time: '15 min ago', status: 'success' },
-  { action: 'Image optimization failed', product: 'Embroidered Dupatta', time: '1 hr ago', status: 'error' },
-  { action: 'New combo created', product: 'Festival Bundle Pack #12', time: '3 hr ago', status: 'success' },
-  { action: 'Meesho listing pending', product: 'Bandhani Print Kurti', time: '5 hr ago', status: 'warning' },
 ]
 
 export default async function DashboardPage() {
@@ -214,24 +204,40 @@ export default async function DashboardPage() {
       <div className="glass-card rounded-xl p-5">
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-syne font-semibold text-white">Recent Activity</h2>
-          <button className="text-xs text-indigo-400 hover:text-indigo-300 font-dm transition-colors">View all</button>
+          <a href="/products" className="text-xs text-indigo-400 hover:text-indigo-300 font-dm transition-colors">View all</a>
         </div>
-        <div className="space-y-3">
-          {recentActivity.map((item, i) => (
-            <div key={i} className="flex items-start gap-3 py-2.5 border-b border-white/5 last:border-0">
-              <div className="mt-0.5 shrink-0">
-                {item.status === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-400" />}
-                {item.status === 'error' && <AlertCircle className="w-4 h-4 text-red-400" />}
-                {item.status === 'warning' && <AlertTriangle className="w-4 h-4 text-amber-400" />}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-dm text-slate-300">{item.action}</p>
-                <p className="text-xs font-dm text-slate-500 truncate">{item.product}</p>
-              </div>
-              <span className="text-xs font-dm text-slate-600 shrink-0">{item.time}</span>
-            </div>
-          ))}
-        </div>
+        {recentProducts.length === 0 ? (
+          <p className="text-slate-500 text-sm font-dm py-4 text-center">No recent activity.</p>
+        ) : (
+          <div className="space-y-3">
+            {recentProducts.map((product) => {
+              const createdAt = new Date(product.created_at)
+              const now = new Date()
+              const diffMs = now.getTime() - createdAt.getTime()
+              const diffMins = Math.floor(diffMs / 60000)
+              const diffHrs = Math.floor(diffMins / 60)
+              const diffDays = Math.floor(diffHrs / 24)
+              const timeAgo =
+                diffMins < 1 ? 'just now'
+                : diffMins < 60 ? `${diffMins} min ago`
+                : diffHrs < 24 ? `${diffHrs} hr ago`
+                : `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`
+
+              return (
+                <div key={product.id} className="flex items-start gap-3 py-2.5 border-b border-white/5 last:border-0">
+                  <div className="mt-0.5 shrink-0">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-dm text-slate-300">Product added: {product.name}</p>
+                    <p className="text-xs font-dm text-slate-500 truncate">{product.category ?? 'Uncategorised'}</p>
+                  </div>
+                  <span className="text-xs font-dm text-slate-600 shrink-0">{timeAgo}</span>
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       {/* Quick Actions */}

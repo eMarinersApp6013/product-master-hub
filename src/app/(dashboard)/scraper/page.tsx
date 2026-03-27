@@ -1,207 +1,130 @@
-import {
-  Globe2,
-  Search,
-  Play,
-  Clock,
-  CheckCircle2,
-  AlertCircle,
-  Loader,
-  ExternalLink,
-  Download,
-  Package,
-} from 'lucide-react'
+'use client'
 
-const recentScrapes = [
-  {
-    id: 1,
-    url: 'amazon.in/dp/B09XXXXXX1',
-    product: 'Silk Blend Kurta Set – Green',
-    platform: 'Amazon',
-    status: 'completed',
-    time: '2 min ago',
-    fieldsExtracted: 12,
-  },
-  {
-    id: 2,
-    url: 'flipkart.com/p/itm123',
-    product: 'Cotton Bandhani Saree',
-    platform: 'Flipkart',
-    status: 'completed',
-    time: '18 min ago',
-    fieldsExtracted: 10,
-  },
-  {
-    id: 3,
-    url: 'etsy.com/listing/987654',
-    product: 'Handmade Beaded Jewelry Set',
-    platform: 'Etsy',
-    status: 'processing',
-    time: 'Just now',
-    fieldsExtracted: 0,
-  },
-  {
-    id: 4,
-    url: 'meesho.com/product/456',
-    product: 'Floral Print Kurti',
-    platform: 'Meesho',
-    status: 'failed',
-    time: '1 hr ago',
-    fieldsExtracted: 0,
-  },
-]
+import { useState, useCallback } from 'react'
+import { Globe2, Search, CheckCircle2, XCircle, Clock, RefreshCw, Plus } from 'lucide-react'
 
-const platformColors: Record<string, string> = {
-  Amazon: '#FF9900',
-  Flipkart: '#2874F0',
-  Etsy: '#F56400',
-  Meesho: '#9B32B4',
+interface ScrapeResult {
+  id: string; url: string; status: 'success' | 'error' | 'pending'
+  product?: Record<string, unknown>; platform?: string; timestamp: string; error?: string
+}
+
+function detectPlatform(u: string) {
+  if (u.includes('amazon')) return 'Amazon'
+  if (u.includes('flipkart')) return 'Flipkart'
+  if (u.includes('meesho')) return 'Meesho'
+  if (u.includes('etsy')) return 'Etsy'
+  return 'Web'
 }
 
 export default function ScraperPage() {
+  const [url, setUrl]         = useState('')
+  const [loading, setLoading] = useState(false)
+  const [jobs, setJobs]       = useState<ScrapeResult[]>([])
+  const [result, setResult]   = useState<Record<string, unknown> | null>(null)
+  const [error, setError]     = useState('')
+  const [added, setAdded]     = useState(false)
+
+  const handleScrape = useCallback(async () => {
+    if (!url.trim()) return
+    setLoading(true); setError(''); setResult(null); setAdded(false)
+
+    const jobId = Date.now().toString()
+    setJobs(prev => [{ id: jobId, url, status: 'pending', platform: detectPlatform(url), timestamp: new Date().toISOString() }, ...prev.slice(0, 9)])
+
+    try {
+      const res  = await fetch('/api/scraper', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Scrape failed')
+      setResult(data.product)
+      setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: 'success', product: data.product } : j))
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Scrape failed'
+      setError(msg)
+      setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: 'error', error: msg } : j))
+    } finally {
+      setLoading(false)
+    }
+  }, [url])
+
+  const handleAdd = async () => {
+    if (!result) return
+    const res = await fetch('/api/products', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(result) })
+    if (res.ok) { setAdded(true) } else { const d = await res.json(); alert(d.error || 'Failed') }
+  }
+
   return (
     <div className="p-6 space-y-6">
-      {/* Header */}
       <div>
-        <h1 className="font-syne font-bold text-2xl text-white">Scraper</h1>
-        <p className="text-slate-400 text-sm font-dm mt-0.5">
-          Extract product data from any eCommerce platform
-        </p>
+        <h1 className="font-syne font-bold text-2xl text-white">Product Scraper</h1>
+        <p className="text-slate-400 text-sm font-dm mt-0.5">Extract product data from Amazon, Flipkart, Meesho & Etsy via AI</p>
       </div>
 
-      {/* Main Scraper Input */}
-      <div className="glass-card rounded-xl p-6 space-y-5">
-        <div className="flex items-center gap-2 mb-2">
-          <Globe2 className="w-5 h-5 text-indigo-400" />
-          <h2 className="font-syne font-semibold text-white">New Scrape Job</h2>
-        </div>
-
-        <div>
-          <label className="block text-xs font-dm text-slate-400 mb-2">
-            Product URL(s)
-          </label>
-          <textarea
-            rows={4}
-            placeholder="Paste product URLs (one per line)&#10;https://www.amazon.in/dp/B09XXXXX&#10;https://www.flipkart.com/..."
-            className="w-full bg-[#1E293B] border border-white/10 rounded-lg px-4 py-3 text-sm font-dm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50 resize-none"
-          />
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-xs font-dm text-slate-400 mb-1.5">
-              Auto-detect Platform
-            </label>
-            <div className="flex items-center gap-2 px-3 py-2.5 bg-[#1E293B] border border-white/10 rounded-lg">
-              <div className="w-2 h-2 rounded-full bg-emerald-400" />
-              <span className="text-sm font-dm text-slate-300">Enabled</span>
-            </div>
+      <div className="glass-card rounded-xl p-5 space-y-4">
+        <h2 className="font-syne font-semibold text-white">Paste Product URL</h2>
+        <div className="flex gap-3">
+          <div className="relative flex-1">
+            <Globe2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+            <input type="url" value={url} onChange={e => setUrl(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleScrape()}
+              placeholder="https://www.amazon.in/dp/…  or  flipkart.com/…"
+              className="w-full bg-[#1E293B] border border-white/10 rounded-lg pl-10 pr-4 py-2.5 text-sm font-dm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50" />
           </div>
-          <div>
-            <label className="block text-xs font-dm text-slate-400 mb-1.5">
-              Extract Images
-            </label>
-            <div className="flex items-center gap-2 px-3 py-2.5 bg-[#1E293B] border border-white/10 rounded-lg">
-              <div className="w-2 h-2 rounded-full bg-emerald-400" />
-              <span className="text-sm font-dm text-slate-300">Yes (all variants)</span>
-            </div>
-          </div>
-          <div>
-            <label className="block text-xs font-dm text-slate-400 mb-1.5">
-              Add to Catalog
-            </label>
-            <div className="flex items-center gap-2 px-3 py-2.5 bg-[#1E293B] border border-white/10 rounded-lg">
-              <div className="w-2 h-2 rounded-full bg-amber-400" />
-              <span className="text-sm font-dm text-slate-300">After review</span>
-            </div>
-          </div>
+          <button onClick={handleScrape} disabled={loading || !url.trim()}
+            className="flex items-center gap-2 px-5 py-2.5 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-dm font-medium rounded-lg transition-colors">
+            {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+            {loading ? 'Scraping…' : 'Scrape'}
+          </button>
         </div>
+        {error && <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm font-dm"><XCircle className="w-4 h-4 shrink-0" />{error}</div>}
+      </div>
 
-        {/* What gets scraped */}
-        <div className="bg-white/[0.03] rounded-lg p-4">
-          <p className="text-xs font-dm text-slate-400 mb-3 font-medium">Fields extracted:</p>
-          <div className="flex flex-wrap gap-2">
-            {[
-              'Title', 'Description', 'Price', 'MRP', 'Images',
-              'Category', 'Brand', 'Keywords', 'Ratings', 'Variants', 'Dimensions', 'Weight',
-            ].map((field) => (
-              <span
-                key={field}
-                className="text-[11px] font-dm px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-300 border border-indigo-500/20"
-              >
-                {field}
-              </span>
+      {result && (
+        <div className="glass-card rounded-xl p-5 border border-emerald-500/30 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="font-syne font-semibold text-white flex items-center gap-2"><CheckCircle2 className="w-5 h-5 text-emerald-400" />Scraped Product</h2>
+            {!added
+              ? <button onClick={handleAdd} className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-dm font-medium rounded-lg transition-colors"><Plus className="w-4 h-4" />Add to Catalog</button>
+              : <span className="text-emerald-400 text-sm font-dm flex items-center gap-1"><CheckCircle2 className="w-4 h-4" />Added!</span>}
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {(Object.entries(result) as [string, unknown][]).filter(([, v]) => v !== null && v !== undefined && typeof v !== 'object').map(([k, v]) => (
+              <div key={k} className="bg-white/5 rounded-lg p-3">
+                <p className="text-xs font-dm text-slate-500 capitalize mb-1">{k.replace(/_/g,' ')}</p>
+                <p className="text-sm font-dm text-slate-200 truncate">{String(v)}</p>
+              </div>
             ))}
           </div>
         </div>
+      )}
 
-        <button className="flex items-center gap-2 px-6 py-3 bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-dm font-medium rounded-lg transition-colors">
-          <Play className="w-4 h-4" />
-          Start Scraping
-        </button>
-      </div>
+      {jobs.length > 0 && (
+        <div className="glass-card rounded-xl p-5">
+          <h2 className="font-syne font-semibold text-white mb-4">Recent Scrapes</h2>
+          <div className="space-y-2">
+            {jobs.map(job => (
+              <div key={job.id} className="flex items-center gap-3 p-3 bg-white/3 rounded-lg border border-white/5">
+                {job.status === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />}
+                {job.status === 'error'   && <XCircle className="w-4 h-4 text-red-400 shrink-0" />}
+                {job.status === 'pending' && <Clock className="w-4 h-4 text-amber-400 shrink-0 animate-pulse" />}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-dm text-slate-300 truncate">{(job.product?.name as string) || job.url}</p>
+                  <p className="text-xs font-dm text-slate-500">{job.platform} · {job.error || 'completed'}</p>
+                </div>
+                <span className="text-xs font-dm text-slate-600 shrink-0">{new Date(job.timestamp).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
-      {/* Recent Jobs */}
-      <div className="glass-card rounded-xl overflow-hidden">
-        <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between">
-          <h2 className="font-syne font-semibold text-white">Recent Scrape Jobs</h2>
-          <button className="text-xs text-indigo-400 hover:text-indigo-300 font-dm">
-            View all
-          </button>
-        </div>
-        <div className="divide-y divide-white/5">
-          {recentScrapes.map((job) => (
-            <div key={job.id} className="flex items-center gap-4 px-5 py-4 hover:bg-white/[0.02] group">
-              <div className="shrink-0">
-                {job.status === 'completed' && <CheckCircle2 className="w-5 h-5 text-emerald-400" />}
-                {job.status === 'processing' && <Loader className="w-5 h-5 text-indigo-400 animate-spin" />}
-                {job.status === 'failed' && <AlertCircle className="w-5 h-5 text-red-400" />}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span
-                    className="text-[10px] font-dm px-1.5 py-0.5 rounded"
-                    style={{
-                      backgroundColor: `${platformColors[job.platform]}18`,
-                      color: platformColors[job.platform],
-                    }}
-                  >
-                    {job.platform}
-                  </span>
-                  <p className="text-sm font-dm text-slate-300 truncate">{job.product}</p>
-                </div>
-                <p className="text-xs font-dm text-slate-600 mt-0.5 truncate">{job.url}</p>
-              </div>
-              <div className="text-right shrink-0">
-                {job.status === 'completed' && (
-                  <p className="text-xs font-dm text-emerald-400">{job.fieldsExtracted} fields</p>
-                )}
-                {job.status === 'failed' && (
-                  <p className="text-xs font-dm text-red-400">Failed</p>
-                )}
-                {job.status === 'processing' && (
-                  <p className="text-xs font-dm text-indigo-400">Processing…</p>
-                )}
-                <div className="flex items-center gap-1 text-slate-600 mt-1 justify-end">
-                  <Clock className="w-3 h-3" />
-                  <span className="text-[10px] font-dm">{job.time}</span>
-                </div>
-              </div>
-              {job.status === 'completed' && (
-                <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button className="w-7 h-7 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center text-slate-400 hover:text-white">
-                    <Package className="w-3.5 h-3.5" />
-                  </button>
-                  <button className="w-7 h-7 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center text-slate-400 hover:text-white">
-                    <Download className="w-3.5 h-3.5" />
-                  </button>
-                  <button className="w-7 h-7 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center text-slate-400 hover:text-white">
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
+      <div className="glass-card rounded-xl p-5">
+        <h2 className="font-syne font-semibold text-white mb-3">How it works</h2>
+        <ol className="space-y-2 text-sm font-dm text-slate-400 list-decimal list-inside">
+          <li>Paste any Amazon, Flipkart, Meesho or Etsy product URL above</li>
+          <li>Our AI extracts product name, price, description, images & more</li>
+          <li>Review the extracted data and click <strong className="text-slate-200">Add to Catalog</strong></li>
+          <li>Product is saved to your ProductVault instantly</li>
+        </ol>
       </div>
     </div>
   )

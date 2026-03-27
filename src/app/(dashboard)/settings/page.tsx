@@ -1,3 +1,6 @@
+'use client'
+
+import { useEffect, useState } from 'react'
 import {
   Settings,
   User,
@@ -14,42 +17,12 @@ import {
 } from 'lucide-react'
 
 const settingsSections = [
-  {
-    id: 'profile',
-    label: 'Profile & Business',
-    icon: User,
-    color: '#6366F1',
-  },
-  {
-    id: 'platforms',
-    label: 'Platform Connections',
-    icon: Store,
-    color: '#10B981',
-  },
-  {
-    id: 'billing',
-    label: 'Billing & Plans',
-    icon: CreditCard,
-    color: '#F59E0B',
-  },
-  {
-    id: 'notifications',
-    label: 'Notifications',
-    icon: Bell,
-    color: '#EC4899',
-  },
-  {
-    id: 'security',
-    label: 'Security',
-    icon: Shield,
-    color: '#EF4444',
-  },
-  {
-    id: 'api',
-    label: 'API & Webhooks',
-    icon: Webhook,
-    color: '#8B5CF6',
-  },
+  { id: 'profile', label: 'Profile & Business', icon: User, color: '#6366F1' },
+  { id: 'platforms', label: 'Platform Connections', icon: Store, color: '#10B981' },
+  { id: 'billing', label: 'Billing & Plans', icon: CreditCard, color: '#F59E0B' },
+  { id: 'notifications', label: 'Notifications', icon: Bell, color: '#EC4899' },
+  { id: 'security', label: 'Security', icon: Shield, color: '#EF4444' },
+  { id: 'api', label: 'API & Webhooks', icon: Webhook, color: '#8B5CF6' },
 ]
 
 const platforms = [
@@ -59,9 +32,86 @@ const platforms = [
   { name: 'Meesho Supplier', connected: true, color: '#9B32B4', sellerId: 'MS-SUP-4421' },
 ]
 
+type FormState = {
+  storeName: string
+  gstNumber: string
+  email: string
+  phone: string
+  address: string
+}
+
 export default function SettingsPage() {
+  const [form, setForm] = useState<FormState>({
+    storeName: '',
+    gstNumber: '',
+    email: '',
+    phone: '',
+    address: '',
+  })
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [toast, setToast] = useState<string | null>(null)
+  const [apiUnavailable, setApiUnavailable] = useState(false)
+
+  // On mount, fetch current profile
+  useEffect(() => {
+    fetch('/api/user/profile')
+      .then((res) => {
+        if (!res.ok) throw new Error('unavailable')
+        return res.json()
+      })
+      .then((data) => {
+        setForm({
+          storeName: data.store_name ?? '',
+          gstNumber: data.gst_number ?? '',
+          email: data.email ?? '',
+          phone: data.phone ?? '',
+          address: data.address ?? '',
+        })
+        setApiUnavailable(false)
+      })
+      .catch(() => {
+        setApiUnavailable(true)
+      })
+      .finally(() => setLoading(false))
+  }, [])
+
+  const handleChange = (field: keyof FormState) => (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
+    setForm((prev) => ({ ...prev, [field]: e.target.value }))
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      const res = await fetch('/api/user/profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ store_name: form.storeName }),
+      })
+      if (!res.ok) throw new Error('save failed')
+      setToast('Settings saved!')
+      setTimeout(() => setToast(null), 3000)
+    } catch {
+      setApiUnavailable(true)
+      setToast('Profile settings will be saved when connected')
+      setTimeout(() => setToast(null), 3000)
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <div className="p-6 space-y-6">
+      {/* Toast */}
+      {toast && (
+        <div className="fixed top-5 right-5 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-sm font-dm shadow-xl backdrop-blur-sm">
+          <CheckCircle2 className="w-4 h-4 shrink-0" />
+          {toast}
+        </div>
+      )}
+
       {/* Header */}
       <div>
         <h1 className="font-syne font-bold text-2xl text-white">Settings</h1>
@@ -70,12 +120,18 @@ export default function SettingsPage() {
         </p>
       </div>
 
+      {apiUnavailable && (
+        <div className="px-4 py-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-sm font-dm">
+          Profile settings will be saved when connected
+        </div>
+      )}
+
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* Navigation */}
         <div className="glass-card rounded-xl p-3 space-y-1 h-fit">
           {settingsSections.map((section) => {
             const Icon = section.icon
-            const isActive = section.id === 'platforms'
+            const isActive = section.id === 'profile'
             return (
               <button
                 key={section.id}
@@ -103,51 +159,71 @@ export default function SettingsPage() {
           {/* Profile */}
           <div className="glass-card rounded-xl p-5 space-y-4">
             <h2 className="font-syne font-semibold text-white">Business Profile</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-dm text-slate-400 mb-1.5">Business Name</label>
-                <input
-                  type="text"
-                  defaultValue="Ananya Fashion House"
-                  className="w-full bg-[#1E293B] border border-white/10 rounded-lg px-3 py-2.5 text-sm font-dm text-slate-200 focus:outline-none focus:border-indigo-500/50"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-dm text-slate-400 mb-1.5">GST Number</label>
-                <input
-                  type="text"
-                  defaultValue="22AAAAA0000A1Z5"
-                  className="w-full bg-[#1E293B] border border-white/10 rounded-lg px-3 py-2.5 text-sm font-dm text-slate-200 focus:outline-none focus:border-indigo-500/50"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-dm text-slate-400 mb-1.5">Contact Email</label>
-                <input
-                  type="email"
-                  defaultValue="ananya@fashionhouse.in"
-                  className="w-full bg-[#1E293B] border border-white/10 rounded-lg px-3 py-2.5 text-sm font-dm text-slate-200 focus:outline-none focus:border-indigo-500/50"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-dm text-slate-400 mb-1.5">WhatsApp / Phone</label>
-                <input
-                  type="tel"
-                  defaultValue="+91 98765 43210"
-                  className="w-full bg-[#1E293B] border border-white/10 rounded-lg px-3 py-2.5 text-sm font-dm text-slate-200 focus:outline-none focus:border-indigo-500/50"
-                />
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs font-dm text-slate-400 mb-1.5">Business Address</label>
-              <textarea
-                rows={2}
-                defaultValue="42, Textile Market, Surat, Gujarat - 395003"
-                className="w-full bg-[#1E293B] border border-white/10 rounded-lg px-3 py-2.5 text-sm font-dm text-slate-200 focus:outline-none focus:border-indigo-500/50 resize-none"
-              />
-            </div>
-            <button className="px-5 py-2.5 bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-dm font-medium rounded-lg transition-colors">
-              Save Changes
-            </button>
+            {loading ? (
+              <p className="text-slate-500 text-sm font-dm py-4">Loading profile…</p>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-dm text-slate-400 mb-1.5">Business Name</label>
+                    <input
+                      type="text"
+                      value={form.storeName}
+                      onChange={handleChange('storeName')}
+                      placeholder="Your business name"
+                      className="w-full bg-[#1E293B] border border-white/10 rounded-lg px-3 py-2.5 text-sm font-dm text-slate-200 focus:outline-none focus:border-indigo-500/50"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-dm text-slate-400 mb-1.5">GST Number</label>
+                    <input
+                      type="text"
+                      value={form.gstNumber}
+                      onChange={handleChange('gstNumber')}
+                      placeholder="22AAAAA0000A1Z5"
+                      className="w-full bg-[#1E293B] border border-white/10 rounded-lg px-3 py-2.5 text-sm font-dm text-slate-200 focus:outline-none focus:border-indigo-500/50"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-dm text-slate-400 mb-1.5">Contact Email</label>
+                    <input
+                      type="email"
+                      value={form.email}
+                      onChange={handleChange('email')}
+                      placeholder="you@example.com"
+                      className="w-full bg-[#1E293B] border border-white/10 rounded-lg px-3 py-2.5 text-sm font-dm text-slate-200 focus:outline-none focus:border-indigo-500/50"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-dm text-slate-400 mb-1.5">WhatsApp / Phone</label>
+                    <input
+                      type="tel"
+                      value={form.phone}
+                      onChange={handleChange('phone')}
+                      placeholder="+91 98765 43210"
+                      className="w-full bg-[#1E293B] border border-white/10 rounded-lg px-3 py-2.5 text-sm font-dm text-slate-200 focus:outline-none focus:border-indigo-500/50"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-dm text-slate-400 mb-1.5">Business Address</label>
+                  <textarea
+                    rows={2}
+                    value={form.address}
+                    onChange={handleChange('address')}
+                    placeholder="Your business address"
+                    className="w-full bg-[#1E293B] border border-white/10 rounded-lg px-3 py-2.5 text-sm font-dm text-slate-200 focus:outline-none focus:border-indigo-500/50 resize-none"
+                  />
+                </div>
+                <button
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="px-5 py-2.5 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-60 text-white text-sm font-dm font-medium rounded-lg transition-colors"
+                >
+                  {saving ? 'Saving…' : 'Save Changes'}
+                </button>
+              </>
+            )}
           </div>
 
           {/* Platform Connections */}

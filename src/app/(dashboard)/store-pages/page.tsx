@@ -1,201 +1,190 @@
-import {
-  Store,
-  Plus,
-  Eye,
-  Edit2,
-  Globe2,
-  ExternalLink,
-  BarChart2,
-  Smartphone,
-  Monitor,
-  Layout,
-} from 'lucide-react'
+'use client'
 
-const storePages = [
-  {
-    id: 1,
-    name: 'Main Storefront',
-    url: 'your-store.productvault.in',
-    type: 'Homepage',
-    status: 'live',
-    visits: 2847,
-    conversions: '4.2%',
-    template: 'Boutique Dark',
-  },
-  {
-    id: 2,
-    name: 'Ethnic Wear Collection',
-    url: 'your-store.productvault.in/ethnic',
-    type: 'Category Page',
-    status: 'live',
-    visits: 1234,
-    conversions: '5.8%',
-    template: 'Gallery Grid',
-  },
-  {
-    id: 3,
-    name: 'Festival Sale Landing',
-    url: 'your-store.productvault.in/festival',
-    type: 'Landing Page',
-    status: 'draft',
-    visits: 0,
-    conversions: '—',
-    template: 'Sale Banner',
-  },
-]
+import { useState, useEffect } from 'react'
+import { Store, Plus, Eye, Edit2, Trash2, Copy, Globe, RefreshCw } from 'lucide-react'
 
-const templates = [
-  { name: 'Boutique Dark', category: 'Fashion', preview: '#6366F1' },
-  { name: 'Gallery Grid', category: 'Catalog', preview: '#10B981' },
-  { name: 'Sale Banner', category: 'Promotions', preview: '#F59E0B' },
-  { name: 'Minimal White', category: 'Premium', preview: '#EC4899' },
-  { name: 'Indian Festive', category: 'Seasonal', preview: '#EF4444' },
-  { name: 'WhatsApp Store', category: 'Social', preview: '#25D366' },
+interface StorePage {
+  id: number; title: string; slug: string; template: string
+  published: boolean; visits: number; created_at: string; updated_at: string
+}
+
+const TEMPLATES = [
+  { id: 'landing',   label: 'Landing Page',   desc: 'Hero section, features, CTA button' },
+  { id: 'catalog',   label: 'Product Catalog', desc: 'Grid of all your products with filters' },
+  { id: 'wholesale', label: 'Wholesale',       desc: 'B2B pricing table, bulk order form' },
+  { id: 'seasonal',  label: 'Seasonal Sale',   desc: 'Banner, countdown, discounted products' },
 ]
 
 export default function StorePagesPage() {
+  const [pages,    setPages]    = useState<StorePage[]>([])
+  const [loading,  setLoading]  = useState(true)
+  const [showForm, setShowForm] = useState(false)
+  const [saving,   setSaving]   = useState(false)
+  const [error,    setError]    = useState('')
+  const [copied,   setCopied]   = useState<number | null>(null)
+
+  // Form
+  const [title,    setTitle]    = useState('')
+  const [slug,     setSlug]     = useState('')
+  const [template, setTemplate] = useState('catalog')
+
+  const load = async () => {
+    setLoading(true)
+    try {
+      const res = await fetch('/api/store-pages')
+      if (res.ok) { const d = await res.json(); setPages(d.pages || []) }
+    } finally { setLoading(false) }
+  }
+
+  useEffect(() => { load() }, [])
+
+  const handleTitleChange = (v: string) => {
+    setTitle(v)
+    setSlug(v.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''))
+  }
+
+  const handleSave = async () => {
+    if (!title.trim() || !slug.trim()) { setError('Title and slug are required'); return }
+    setSaving(true); setError('')
+    try {
+      const res = await fetch('/api/store-pages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, slug, template, published: true }),
+      })
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Save failed') }
+      setShowForm(false); setTitle(''); setSlug('')
+      load()
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Save failed')
+    } finally { setSaving(false) }
+  }
+
+  const handleDelete = async (id: number) => {
+    if (!confirm('Delete this page?')) return
+    await fetch(`/api/store-pages/${id}`, { method: 'DELETE' })
+    setPages(prev => prev.filter(p => p.id !== id))
+  }
+
+  const handleTogglePublish = async (page: StorePage) => {
+    const res = await fetch(`/api/store-pages/${page.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ published: !page.published }),
+    })
+    if (res.ok) setPages(prev => prev.map(p => p.id === page.id ? { ...p, published: !p.published } : p))
+  }
+
+  const handleCopy = (page: StorePage) => {
+    const url = `${window.location.origin}/store/${page.slug}`
+    navigator.clipboard.writeText(url).catch(() => {})
+    setCopied(page.id)
+    setTimeout(() => setCopied(null), 2000)
+  }
+
   return (
     <div className="p-6 space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-syne font-bold text-2xl text-white">Store Pages</h1>
-          <p className="text-slate-400 text-sm font-dm mt-0.5">
-            Build and manage your branded online store
-          </p>
+          <p className="text-slate-400 text-sm font-dm mt-0.5">Create shareable product pages for your customers</p>
         </div>
-        <button className="flex items-center gap-2 px-4 py-2.5 bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-dm font-medium rounded-lg transition-colors">
-          <Plus className="w-4 h-4" />
-          New Page
+        <button onClick={() => setShowForm(!showForm)}
+          className="flex items-center gap-2 px-4 py-2.5 bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-dm font-medium rounded-lg transition-colors">
+          <Plus className="w-4 h-4" />New Page
         </button>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {[
-          { label: 'Total Visits', value: '4,081', icon: BarChart2, color: '#6366F1' },
-          { label: 'Avg Conversion', value: '5.0%', icon: Store, color: '#10B981' },
-          { label: 'Live Pages', value: '2', icon: Globe2, color: '#F59E0B' },
-        ].map((stat) => {
-          const Icon = stat.icon
-          return (
-            <div key={stat.label} className="glass-card rounded-xl p-5 flex items-center gap-4">
-              <div
-                className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-                style={{ backgroundColor: `${stat.color}18` }}
-              >
-                <Icon className="w-5 h-5" style={{ color: stat.color }} />
-              </div>
-              <div>
-                <p className="font-syne font-bold text-xl text-white">{stat.value}</p>
-                <p className="font-dm text-slate-500 text-sm">{stat.label}</p>
+      {/* Create Form */}
+      {showForm && (
+        <div className="glass-card rounded-xl p-5 border border-indigo-500/30 space-y-4">
+          <h2 className="font-syne font-semibold text-white">Create New Page</h2>
+
+          <div className="grid grid-cols-2 gap-3">
+            {TEMPLATES.map(t => (
+              <button key={t.id} onClick={() => setTemplate(t.id)}
+                className={`p-3 rounded-xl border text-left transition-all ${template === t.id ? 'border-indigo-500/60 bg-indigo-500/10' : 'border-white/10 bg-white/3 hover:border-white/20'}`}>
+                <p className="text-sm font-dm font-semibold text-white">{t.label}</p>
+                <p className="text-xs font-dm text-slate-500 mt-0.5">{t.desc}</p>
+              </button>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-dm text-slate-400 mb-1.5">Page Title *</label>
+              <input value={title} onChange={e => handleTitleChange(e.target.value)}
+                placeholder="My Store"
+                className="w-full bg-[#1E293B] border border-white/10 rounded-lg px-3 py-2.5 text-sm font-dm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50" />
+            </div>
+            <div>
+              <label className="block text-xs font-dm text-slate-400 mb-1.5">URL Slug *</label>
+              <div className="flex items-center gap-1">
+                <span className="text-xs font-dm text-slate-500 shrink-0">/store/</span>
+                <input value={slug} onChange={e => setSlug(e.target.value.replace(/[^a-z0-9-]/g, ''))}
+                  placeholder="my-store"
+                  className="flex-1 bg-[#1E293B] border border-white/10 rounded-lg px-3 py-2.5 text-sm font-dm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50" />
               </div>
             </div>
-          )
-        })}
-      </div>
+          </div>
 
-      {/* My Pages */}
-      <div>
-        <h2 className="font-syne font-semibold text-white mb-3">My Pages</h2>
-        <div className="space-y-3">
-          {storePages.map((page) => (
-            <div
-              key={page.id}
-              className="glass-card rounded-xl p-5 hover:border-white/10 transition-all"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex items-start gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-500/20 flex items-center justify-center shrink-0">
-                    <Layout className="w-5 h-5 text-indigo-400" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-dm font-semibold text-white">{page.name}</h3>
-                      <span
-                        className={`text-[10px] font-dm px-2 py-0.5 rounded-full ${
-                          page.status === 'live'
-                            ? 'bg-emerald-400/10 text-emerald-400'
-                            : 'bg-amber-400/10 text-amber-400'
-                        }`}
-                      >
-                        {page.status}
-                      </span>
-                    </div>
-                    <p className="text-xs font-dm text-slate-500 mt-0.5">{page.type} · {page.template}</p>
-                    <p className="text-xs font-dm text-indigo-400 mt-1 flex items-center gap-1">
-                      <Globe2 className="w-3 h-3" />
-                      {page.url}
-                    </p>
-                  </div>
-                </div>
+          {error && <p className="text-red-400 text-sm font-dm">{error}</p>}
 
-                {page.status === 'live' && (
-                  <div className="flex gap-4 text-right shrink-0">
-                    <div>
-                      <p className="text-xs font-dm text-slate-500">Visits</p>
-                      <p className="font-syne font-bold text-white">{page.visits.toLocaleString()}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-dm text-slate-500">Conv. Rate</p>
-                      <p className="font-syne font-bold text-emerald-400">{page.conversions}</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex items-center gap-2 mt-4 pt-4 border-t border-white/5">
-                <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-dm rounded-lg border border-white/10 bg-white/5 text-slate-400 hover:text-white">
-                  <Edit2 className="w-3 h-3" />
-                  Edit
-                </button>
-                <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-dm rounded-lg border border-white/10 bg-white/5 text-slate-400 hover:text-white">
-                  <Eye className="w-3 h-3" />
-                  Preview
-                </button>
-                <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-dm rounded-lg border border-white/10 bg-white/5 text-slate-400 hover:text-white">
-                  <Monitor className="w-3 h-3" />
-                  Desktop
-                </button>
-                <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-dm rounded-lg border border-white/10 bg-white/5 text-slate-400 hover:text-white">
-                  <Smartphone className="w-3 h-3" />
-                  Mobile
-                </button>
-                {page.status === 'live' && (
-                  <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-dm rounded-lg border border-indigo-500/30 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 ml-auto">
-                    <ExternalLink className="w-3 h-3" />
-                    Open Live
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Templates */}
-      <div>
-        <h2 className="font-syne font-semibold text-white mb-3">Page Templates</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
-          {templates.map((t) => (
-            <button
-              key={t.name}
-              className="glass-card rounded-xl overflow-hidden hover:border-white/10 transition-all group text-left"
-            >
-              <div
-                className="h-24 flex items-center justify-center"
-                style={{ background: `linear-gradient(135deg, ${t.preview}20, ${t.preview}08)` }}
-              >
-                <Store className="w-8 h-8 opacity-30" style={{ color: t.preview }} />
-              </div>
-              <div className="p-3">
-                <p className="font-dm font-medium text-slate-300 text-xs">{t.name}</p>
-                <p className="font-dm text-slate-600 text-[11px]">{t.category}</p>
-              </div>
+          <div className="flex gap-3">
+            <button onClick={handleSave} disabled={saving}
+              className="flex items-center gap-2 px-5 py-2.5 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 text-white text-sm font-dm font-medium rounded-lg transition-colors">
+              {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : null}
+              {saving ? 'Creating…' : 'Create Page'}
             </button>
+            <button onClick={() => setShowForm(false)} className="px-5 py-2.5 bg-white/5 hover:bg-white/10 text-slate-400 text-sm font-dm rounded-lg transition-colors">Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* Pages List */}
+      {loading ? (
+        <div className="text-center py-12 text-slate-500 font-dm text-sm">Loading pages…</div>
+      ) : pages.length === 0 ? (
+        <div className="glass-card rounded-xl p-12 text-center">
+          <Store className="w-10 h-10 text-slate-600 mx-auto mb-3" />
+          <p className="text-slate-500 font-dm text-sm mb-2">No store pages yet.</p>
+          <p className="text-slate-600 font-dm text-xs">Create a page to share your products with customers via a link.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {pages.map(page => (
+            <div key={page.id} className="glass-card rounded-xl p-5 flex items-center gap-4 hover:border-white/10 transition-all">
+              <div className="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center shrink-0">
+                <Globe className="w-5 h-5 text-indigo-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-syne font-semibold text-white text-sm">{page.title}</p>
+                <p className="text-xs font-dm text-slate-500 mt-0.5">/store/{page.slug} · {page.visits ?? 0} visits</p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-dm font-semibold ${page.published ? 'bg-emerald-500/15 text-emerald-400' : 'bg-slate-500/15 text-slate-400'}`}>
+                  {page.published ? 'Live' : 'Draft'}
+                </span>
+                <button onClick={() => handleTogglePublish(page)} title={page.published ? 'Unpublish' : 'Publish'}
+                  className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 transition-colors">
+                  <Eye className="w-3.5 h-3.5" />
+                </button>
+                <button onClick={() => handleCopy(page)} title="Copy link"
+                  className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 transition-colors">
+                  {copied === page.id ? <span className="text-[10px] text-emerald-400">✓</span> : <Copy className="w-3.5 h-3.5" />}
+                </button>
+                <a href={`/store/${page.slug}`} target="_blank" rel="noreferrer"
+                  className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 transition-colors">
+                  <Edit2 className="w-3.5 h-3.5" />
+                </a>
+                <button onClick={() => handleDelete(page.id)} className="p-1.5 rounded-lg bg-white/5 hover:text-red-400 text-slate-500 transition-colors">
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
           ))}
         </div>
-      </div>
+      )}
     </div>
   )
 }

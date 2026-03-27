@@ -1,3 +1,6 @@
+'use client'
+
+import { useState, useEffect } from 'react'
 import {
   Sparkles,
   Copy,
@@ -8,6 +11,7 @@ import {
   Tag,
   Search,
   MessageSquare,
+  Loader2,
 } from 'lucide-react'
 
 const aiTools = [
@@ -45,20 +49,74 @@ const aiTools = [
   },
 ]
 
-const sampleOutput = `✅ Title (Amazon):
-Silk Blend Kurta Set for Women | Navy Blue Ethnic Wear | Traditional Indian Dress | Regular Fit | XS-3XL
-
-✅ Bullet Points:
-• PREMIUM SILK BLEND FABRIC – Luxurious soft-touch material that drapes beautifully, perfect for festive occasions and daily wear
-• TRADITIONAL DESIGN – Classic Navy Blue with intricate embroidery work, showcasing authentic Indian craftsmanship
-• REGULAR FIT – Relaxed silhouette suitable for all body types; available in sizes XS to 3XL
-• COMPLETE SET – Includes matching kurta, palazzo pants, and dupatta – ready to wear right out of the box
-• EASY CARE – Machine washable fabric; colors stay vibrant even after multiple washes
-
-✅ Description:
-Embrace the elegance of Indian fashion with our Silk Blend Kurta Set in classic Navy Blue. Crafted for the modern Indian woman who values both tradition and comfort...`
+const PLATFORMS = ['Amazon India', 'Flipkart', 'Etsy', 'Meesho']
+const TONES = ['Professional', 'Festive', 'Casual', 'Luxury']
 
 export default function AIStudioPage() {
+  const [selectedTool, setSelectedTool] = useState('listing')
+  const [platform, setPlatform] = useState('Amazon India')
+  const [productInput, setProductInput] = useState('')
+  const [features, setFeatures] = useState('')
+  const [tone, setTone] = useState('Professional')
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [output, setOutput] = useState('')
+  const [aiCredits, setAiCredits] = useState<number | null>(null)
+  const [error, setError] = useState('')
+  const [copied, setCopied] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/user/profile')
+      .then((r) => r.json())
+      .then((data) => {
+        if (typeof data.ai_count === 'number') {
+          setAiCredits(data.ai_count)
+        }
+      })
+      .catch(() => {/* silently fail */})
+  }, [])
+
+  async function handleGenerate() {
+    if (!productInput.trim()) {
+      setError('Please enter a product name or description.')
+      return
+    }
+    setError('')
+    setIsGenerating(true)
+    try {
+      const res = await fetch('/api/ai/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ platform, productInput, features, tone }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setError(data.error || 'Generation failed. Please try again.')
+      } else {
+        setOutput(data.result || '')
+        if (typeof data.credits_used === 'number') {
+          setAiCredits(500 - data.credits_used)
+        }
+      }
+    } catch {
+      setError('Network error. Please try again.')
+    } finally {
+      setIsGenerating(false)
+    }
+  }
+
+  async function handleCopyAll() {
+    if (!output) return
+    try {
+      await navigator.clipboard.writeText(output)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      /* clipboard not available */
+    }
+  }
+
+  const creditsRemaining = aiCredits !== null ? Math.max(0, 500 - aiCredits) : null
+
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
@@ -71,7 +129,9 @@ export default function AIStudioPage() {
         </div>
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20">
           <Zap className="w-4 h-4 text-indigo-400" />
-          <span className="text-xs font-dm text-indigo-300">240 credits remaining</span>
+          <span className="text-xs font-dm text-indigo-300">
+            {creditsRemaining !== null ? `${creditsRemaining} credits remaining` : 'Loading credits…'}
+          </span>
         </div>
       </div>
 
@@ -79,11 +139,13 @@ export default function AIStudioPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         {aiTools.map((tool) => {
           const Icon = tool.icon
+          const isSelected = selectedTool === tool.id
           return (
             <button
               key={tool.id}
+              onClick={() => setSelectedTool(tool.id)}
               className={`glass-card rounded-xl p-5 text-left hover:border-white/10 transition-all group relative ${
-                tool.id === 'listing' ? 'ring-1 ring-indigo-500/30' : ''
+                isSelected ? 'ring-1 ring-indigo-500/30' : ''
               }`}
             >
               {tool.badge && (
@@ -122,11 +184,14 @@ export default function AIStudioPage() {
               Target Platform
             </label>
             <div className="relative">
-              <select className="w-full bg-[#1E293B] border border-white/10 rounded-lg px-3 py-2.5 text-sm font-dm text-slate-200 focus:outline-none focus:border-indigo-500/50 appearance-none">
-                <option>Amazon India</option>
-                <option>Flipkart</option>
-                <option>Etsy</option>
-                <option>Meesho</option>
+              <select
+                value={platform}
+                onChange={(e) => setPlatform(e.target.value)}
+                className="w-full bg-[#1E293B] border border-white/10 rounded-lg px-3 py-2.5 text-sm font-dm text-slate-200 focus:outline-none focus:border-indigo-500/50 appearance-none"
+              >
+                {PLATFORMS.map((p) => (
+                  <option key={p}>{p}</option>
+                ))}
               </select>
               <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
             </div>
@@ -138,6 +203,8 @@ export default function AIStudioPage() {
             </label>
             <input
               type="text"
+              value={productInput}
+              onChange={(e) => setProductInput(e.target.value)}
               placeholder="e.g. Silk Blend Kurta Set, Navy Blue, Women's Ethnic Wear"
               className="w-full bg-[#1E293B] border border-white/10 rounded-lg px-3 py-2.5 text-sm font-dm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50"
             />
@@ -149,6 +216,8 @@ export default function AIStudioPage() {
             </label>
             <textarea
               rows={4}
+              value={features}
+              onChange={(e) => setFeatures(e.target.value)}
               placeholder="Silk blend fabric&#10;Navy blue color&#10;Traditional embroidery&#10;Includes kurta, palazzo, dupatta"
               className="w-full bg-[#1E293B] border border-white/10 rounded-lg px-3 py-2.5 text-sm font-dm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50 resize-none"
             />
@@ -157,24 +226,42 @@ export default function AIStudioPage() {
           <div>
             <label className="block text-xs font-dm text-slate-400 mb-1.5">Tone</label>
             <div className="flex gap-2">
-              {['Professional', 'Festive', 'Casual', 'Luxury'].map((tone) => (
+              {TONES.map((t) => (
                 <button
-                  key={tone}
+                  key={t}
+                  onClick={() => setTone(t)}
                   className={`px-3 py-1.5 text-xs font-dm rounded-lg border transition-colors ${
-                    tone === 'Professional'
+                    tone === t
                       ? 'bg-indigo-500/20 border-indigo-500/30 text-indigo-300'
                       : 'bg-white/5 border-white/10 text-slate-400 hover:text-slate-300'
                   }`}
                 >
-                  {tone}
+                  {t}
                 </button>
               ))}
             </div>
           </div>
 
-          <button className="w-full flex items-center justify-center gap-2 py-3 bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-dm font-medium rounded-lg transition-colors">
-            <Sparkles className="w-4 h-4" />
-            Generate Listing
+          {error && (
+            <p className="text-xs font-dm text-red-400">{error}</p>
+          )}
+
+          <button
+            onClick={handleGenerate}
+            disabled={isGenerating}
+            className="w-full flex items-center justify-center gap-2 py-3 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-dm font-medium rounded-lg transition-colors"
+          >
+            {isGenerating ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Generating…
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-4 h-4" />
+                Generate Listing
+              </>
+            )}
           </button>
         </div>
 
@@ -183,30 +270,59 @@ export default function AIStudioPage() {
           <div className="flex items-center justify-between">
             <h2 className="font-syne font-semibold text-white">Generated Output</h2>
             <div className="flex gap-2">
-              <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-dm rounded-lg border border-white/10 bg-white/5 text-slate-400 hover:text-slate-300">
-                <RefreshCw className="w-3 h-3" />
+              <button
+                onClick={handleGenerate}
+                disabled={isGenerating || !output}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-dm rounded-lg border border-white/10 bg-white/5 text-slate-400 hover:text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <RefreshCw className={`w-3 h-3 ${isGenerating ? 'animate-spin' : ''}`} />
                 Regenerate
               </button>
-              <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-dm rounded-lg border border-white/10 bg-white/5 text-slate-400 hover:text-slate-300">
+              <button
+                onClick={handleCopyAll}
+                disabled={!output}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-dm rounded-lg border border-white/10 bg-white/5 text-slate-400 hover:text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
                 <Copy className="w-3 h-3" />
-                Copy All
+                {copied ? 'Copied!' : 'Copy All'}
               </button>
             </div>
           </div>
 
-          <div className="bg-[#1E293B] rounded-lg p-4 h-[380px] overflow-y-auto">
-            <pre className="text-xs font-dm text-slate-300 whitespace-pre-wrap leading-relaxed">
-              {sampleOutput}
-            </pre>
+          <div className="bg-[#1E293B] rounded-lg p-4 h-[380px] overflow-y-auto flex items-start">
+            {isGenerating ? (
+              <div className="flex flex-col items-center justify-center w-full h-full gap-3">
+                <Loader2 className="w-8 h-8 text-indigo-400 animate-spin" />
+                <p className="text-xs font-dm text-slate-500">AI is generating your listing…</p>
+              </div>
+            ) : output ? (
+              <pre className="text-xs font-dm text-slate-300 whitespace-pre-wrap leading-relaxed">
+                {output}
+              </pre>
+            ) : (
+              <div className="flex flex-col items-center justify-center w-full h-full gap-2">
+                <Sparkles className="w-8 h-8 text-slate-700" />
+                <p className="text-xs font-dm text-slate-600 text-center">
+                  Fill in the product details and click Generate Listing to see your AI-crafted content here.
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="flex items-center justify-between">
             <div className="flex gap-4 text-xs font-dm text-slate-500">
-              <span>2 credits used</span>
-              <span>•</span>
-              <span>Score: 94/100</span>
+              {output && (
+                <>
+                  <span>1 credit used</span>
+                  <span>•</span>
+                  <span>Platform: {platform}</span>
+                </>
+              )}
             </div>
-            <button className="px-4 py-2 bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-xs font-dm rounded-lg hover:bg-emerald-500/30 transition-colors">
+            <button
+              disabled={!output}
+              className="px-4 py-2 bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-xs font-dm rounded-lg hover:bg-emerald-500/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
               Apply to Product
             </button>
           </div>
