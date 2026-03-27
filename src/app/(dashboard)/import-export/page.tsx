@@ -300,10 +300,11 @@ export default function ImportExportPage() {
           </button>
 
           <a
-            href="#"
+            href="/api/products/template"
+            download="productvault-import-template.csv"
             className="block text-center text-xs font-dm text-indigo-400 hover:text-indigo-300 transition-colors"
           >
-            Download import template →
+            ⬇ Download import template (CSV)
           </a>
         </div>
 

@@ -6,6 +6,7 @@ import { UserButton } from '@clerk/nextjs'
 import {
   LayoutDashboard,
   Package,
+  Tag,
   ImageIcon,
   Sparkles,
   Globe2,
@@ -25,6 +26,7 @@ import { cn } from '@/lib/utils'
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/products', label: 'Products', icon: Package },
+  { href: '/categories', label: 'Categories', icon: Tag },
   { href: '/images', label: 'Images', icon: ImageIcon },
   { href: '/ai-studio', label: 'AI Studio', icon: Sparkles },
   { href: '/scraper', label: 'Scraper', icon: Globe2 },

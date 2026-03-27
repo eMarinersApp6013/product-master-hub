@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition, useCallback } from 'react'
+import { useState, useTransition, useCallback, useEffect } from 'react'
 import {
   Search, Filter, Package, Tag, MoreHorizontal, Trash2,
   Edit2, ExternalLink, RefreshCw, ChevronLeft, ChevronRight,
@@ -15,10 +15,6 @@ import { AddProductDialog } from './add-product-dialog'
 // ── Edit Dialog ─────────────────────────────────────────────────────────────
 
 const PLATFORMS = ['Amazon', 'Flipkart', 'Etsy', 'Meesho']
-const CATEGORIES = [
-  'Ethnic Wear', 'Sarees', 'Kurtis', 'Accessories', 'Winterwear',
-  'Footwear', 'Jewellery', 'Home Decor', 'Electronics', 'Other',
-]
 const PLATFORM_COLORS_MAP: Record<string, string> = {
   Amazon: '#FF9900', Flipkart: '#2874F0', Etsy: '#F56400', Meesho: '#9B32B4',
 }
@@ -27,10 +23,12 @@ function EditProductDialog({
   product,
   onClose,
   onSuccess,
+  categories,
 }: {
   product: Product
   onClose: () => void
   onSuccess: () => void
+  categories: string[]
 }) {
   const initialPlatforms: string[] = Array.isArray(product.platforms)
     ? product.platforms
@@ -144,7 +142,7 @@ function EditProductDialog({
                   className="w-full px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-slate-200 text-sm font-dm focus:outline-none focus:border-indigo-500/50 appearance-none"
                 >
                   <option value="" className="bg-[#1E293B]">Select category</option>
-                  {CATEGORIES.map((c) => <option key={c} value={c} className="bg-[#1E293B]">{c}</option>)}
+                  {categories.map((c) => <option key={c} value={c} className="bg-[#1E293B]">{c}</option>)}
                 </select>
               </div>
               <div>
@@ -360,10 +358,19 @@ export function ProductsTable({ initialProducts, initialTotal }: Props) {
   const [total, setTotal] = useState(initialTotal)
   const [search, setSearch] = useState('')
   const [platform, setPlatform] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState('')
   const [page, setPage] = useState(1)
   const [openMenu, setOpenMenu] = useState<number | null>(null)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   const [isPending, startTransition] = useTransition()
+  const [dynamicCategories, setDynamicCategories] = useState<string[]>([])
+
+  useEffect(() => {
+    fetch('/api/categories')
+      .then(r => r.ok ? r.json() : { categories: [] })
+      .then(d => setDynamicCategories((d.categories || []).map((c: { name: string }) => c.name)))
+      .catch(() => {})
+  }, [])
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
@@ -456,10 +463,21 @@ export function ProductsTable({ initialProducts, initialTotal }: Props) {
               {f}
             </button>
           ))}
-          <button className="flex items-center gap-1.5 px-3 py-2 text-xs font-dm rounded-lg border border-white/10 bg-white/5 text-slate-400 hover:text-slate-300">
-            <Filter className="w-3.5 h-3.5" />
-            Filter
-          </button>
+          {dynamicCategories.length > 0 && (
+            <div className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 text-slate-400 text-xs font-dm overflow-hidden">
+              <Filter className="w-3.5 h-3.5 ml-2.5 shrink-0" />
+              <select
+                value={categoryFilter}
+                onChange={e => setCategoryFilter(e.target.value)}
+                className="bg-transparent py-2 pr-2.5 focus:outline-none text-slate-400 appearance-none cursor-pointer"
+              >
+                <option value="" className="bg-[#1E293B]">All Categories</option>
+                {dynamicCategories.map(c => (
+                  <option key={c} value={c} className="bg-[#1E293B]">{c}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
       </div>
 
@@ -626,6 +644,7 @@ export function ProductsTable({ initialProducts, initialTotal }: Props) {
           product={editingProduct}
           onClose={() => setEditingProduct(null)}
           onSuccess={() => fetchProducts(search, platform, page)}
+          categories={dynamicCategories}
         />
       )}
     </div>
