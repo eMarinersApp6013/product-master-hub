@@ -71,6 +71,16 @@ CREATE INDEX IF NOT EXISTS idx_products_category  ON products(category);
 CREATE INDEX IF NOT EXISTS idx_products_sku       ON products(sku);
 CREATE INDEX IF NOT EXISTS idx_products_created   ON products(created_at DESC);
 
+-- Product platforms (multi-platform listings)
+CREATE TABLE IF NOT EXISTS product_platforms (
+  id            SERIAL PRIMARY KEY,
+  product_id    INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  platform_name VARCHAR(255) NOT NULL,
+  UNIQUE (product_id, platform_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_platforms_product_id ON product_platforms(product_id);
+
 -- Product images
 CREATE TABLE IF NOT EXISTS product_images (
   id         SERIAL PRIMARY KEY,
